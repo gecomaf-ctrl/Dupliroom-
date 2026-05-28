@@ -152,7 +152,36 @@ export default function App() {
     };
   }, [roomCode, currentScreen, tournament]);
 
-  // Alerte visuelle à 30 secondes restantes (une seule fois par coup)
+  // Joue un bip d'alerte discret via Web Audio API
+  const playAlertBeep = () => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const beepCount = 3;
+      for (let i = 0; i < beepCount; i++) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.25);
+        gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + i * 0.25 + 0.02);
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + i * 0.25 + 0.18);
+        osc.start(ctx.currentTime + i * 0.25);
+        osc.stop(ctx.currentTime + i * 0.25 + 0.18);
+      }
+      // Fermer le contexte audio après les bips
+      setTimeout(() => ctx.close(), 1000);
+    } catch {
+      // Navigateur sans support AudioContext — silencieux
+    }
+    // Vibration sur mobile (3 impulsions courtes)
+    if ('vibrate' in navigator) {
+      navigator.vibrate([150, 100, 150, 100, 150]);
+    }
+  };
+
+  // Alerte visuelle + sonore à 30 secondes restantes (une seule fois par coup)
   useEffect(() => {
     if (!activeRound || isMeArbitre) return;
 
@@ -170,6 +199,7 @@ export default function App() {
     ) {
       setWarned30s(true);
       triggerAlert(`⏳ Plus que ${activeRound.timerLeft}s ! Validez votre coup !`);
+      playAlertBeep();
     }
   }, [activeRound?.timerLeft]);
 
