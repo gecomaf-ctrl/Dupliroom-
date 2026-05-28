@@ -449,6 +449,13 @@ export default function App() {
     setSelectedRackLetter(null);
   };
 
+  // Remet le coup soumis en mode édition pour permettre une re-soumission
+  const handleEditSubmission = () => {
+    setTempPlacement({ ...submittedPlacement });
+    setSubmittedPlacement({});
+    setSelectedRackLetter(null);
+  };
+
   // Reset to original screen
   const handleRestartNew = () => {
     setRoomCode('');
@@ -1329,35 +1336,78 @@ export default function App() {
                   nextRoundNumber={tournament ? tournament.currentRoundNumber + 1 : 1}
                   isDrawDisabled={activeRound.status !== 'ended'}
                 >
-                  {!isMeArbitre && (
-                    <div className="flex flex-col gap-2 mt-2 bg-stone-50 border border-stone-200/50 rounded-xl p-3 animate-fade-in text-center">
-                      <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-stone-600 border-b border-stone-200/40 pb-2 mb-1.5 font-medium select-none">
-                        <span className="font-extrabold text-[#1A2A6C]">
-                          COUP {tournament.currentRoundNumber} : {previewWord || 'N/A'}
-                        </span>
-                        {previewWord && (
-                          <span className="flex items-center gap-1.5 font-mono text-stone-500">
-                            <span>Pos: <strong className="text-pink-600 font-extrabold">{previewCoordinatesStr || '?'}</strong></span>
-                            <span>•</span>
-                            <span>Score: <strong className="text-[#0B673C] font-extrabold">{previewCalc.error ? '?' : `${previewCalc.score} pts`}</strong></span>
-                          </span>
+                  {!isMeArbitre && (() => {
+                    const hasSubmitted = Object.keys(submittedPlacement).length > 0;
+                    const isComposing = activeRound.status === 'composing';
+
+                    // Récupérer le mot soumis depuis l'état local
+                    const submittedWord = tournament.submissions?.[tournament.currentRoundNumber]?.[playerId];
+
+                    return (
+                      <div className={`flex flex-col gap-2 mt-2 rounded-xl p-3 animate-fade-in text-center border ${
+                        hasSubmitted && !previewWord
+                          ? 'bg-indigo-50/70 border-indigo-200/60'
+                          : 'bg-stone-50 border-stone-200/50'
+                      }`}>
+                        {/* En-tête : mot en cours ou soumis */}
+                        <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-stone-600 border-b border-stone-200/40 pb-2 mb-1.5 font-medium select-none">
+                          {hasSubmitted && !previewWord ? (
+                            <>
+                              <span className="flex items-center gap-1.5 font-extrabold text-indigo-700">
+                                <span className="text-[9px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-black uppercase tracking-widest">Validé ✓</span>
+                                <span className="uppercase tracking-wide">{submittedWord?.word || '—'}</span>
+                              </span>
+                              <span className="flex items-center gap-1.5 font-mono text-stone-500">
+                                <span>Pos: <strong className="text-pink-600 font-extrabold">{submittedWord?.coords || '?'}</strong></span>
+                                <span>•</span>
+                                <span>Score: <strong className="text-indigo-600 font-extrabold">{submittedWord?.points ?? '?'} pts</strong></span>
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <span className="font-extrabold text-[#1A2A6C]">
+                                COUP {tournament.currentRoundNumber} : {previewWord || 'N/A'}
+                              </span>
+                              {previewWord && (
+                                <span className="flex items-center gap-1.5 font-mono text-stone-500">
+                                  <span>Pos: <strong className="text-pink-600 font-extrabold">{previewCoordinatesStr || '?'}</strong></span>
+                                  <span>•</span>
+                                  <span>Score: <strong className="text-[#0B673C] font-extrabold">{previewCalc.error ? '?' : `${previewCalc.score} pts`}</strong></span>
+                                </span>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        {/* Boutons d'action */}
+                        {hasSubmitted && !previewWord ? (
+                          // Coup soumis : proposer la modification si le temps n'est pas écoulé
+                          <button
+                            onClick={handleEditSubmission}
+                            disabled={!isComposing}
+                            className="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:brightness-105 border border-indigo-400/20 text-white disabled:opacity-40 font-black py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all shadow cursor-pointer text-center"
+                          >
+                            {isComposing ? '✏️ Modifier mon coup' : 'Soumissions closes'}
+                          </button>
+                        ) : (
+                          // Mode édition : bouton de validation
+                          <button
+                            onClick={() => {
+                              if (previewWord.trim().length === 0 || !previewCoordinatesStr) {
+                                alert('Veuillez d\'abord positionner vos lettres sur le plateau de jeu.');
+                                return;
+                              }
+                              handlePlayerSubmitProposed(previewWord, previewCalc.score, previewCoordinatesStr);
+                            }}
+                            disabled={!isComposing}
+                            className="w-full bg-gradient-to-r from-[#0C7645] to-[#065C34] hover:brightness-105 border border-[#149959]/15 text-white disabled:opacity-40 font-black py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all shadow cursor-pointer text-center"
+                          >
+                            {!isComposing ? 'Soumissions closes' : hasSubmitted ? '↩ Re-valider mon coup' : 'Valider mon coup'}
+                          </button>
                         )}
                       </div>
-                      <button
-                        onClick={() => {
-                          if (previewWord.trim().length === 0 || !previewCoordinatesStr) {
-                            alert('Veuillez d\'abord positionner vos lettres sur le plateau de jeu.');
-                            return;
-                          }
-                          handlePlayerSubmitProposed(previewWord, previewCalc.score, previewCoordinatesStr);
-                        }}
-                        disabled={activeRound.status !== 'composing'}
-                        className="w-full bg-gradient-to-r from-[#0C7645] to-[#065C34] hover:brightness-105 border border-[#149959]/15 text-white disabled:opacity-40 font-black py-2.5 rounded-xl text-xs uppercase tracking-wider transition-all shadow cursor-pointer text-center"
-                      >
-                        {activeRound.status !== 'composing' ? 'Soumissions closes' : 'Valider mon coup'}
-                      </button>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </ScrabbleRack>
               )}
 
