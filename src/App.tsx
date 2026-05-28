@@ -36,10 +36,27 @@ import { TournamentStats } from './components/TournamentStats.tsx';
 import { TrainingMode } from './components/TrainingMode.tsx';
 import { scorePlacedWord, formatCoordinates, validateWordODS9, PlacementLetter } from './scrabble.js';
 
+// Hash SHA-256 du mot de passe d'accès — le mot de passe en clair n'apparaît jamais ici
+const ACCESS_HASH = '45159b15f36918503b7e43eac30d372adb9973f5af98709dbff8e1fe09fd771d';
+
+async function hashString(input: string): Promise<string> {
+  const encoded = new TextEncoder().encode(input);
+  const buffer = await window.crypto.subtle.digest('SHA-256', encoded);
+  return Array.from(new Uint8Array(buffer))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 export default function App() {
   // Navigation states
-  const [currentScreen, setCurrentScreen] = useState<'splash' | 'accueil' | 'creer' | 'rejoindre' | 'salle_attente' | 'partie' | 'stats' | 'entrainement'>('splash');
+  const [currentScreen, setCurrentScreen] = useState<'password' | 'splash' | 'accueil' | 'creer' | 'rejoindre' | 'salle_attente' | 'partie' | 'stats' | 'entrainement'>('password');
   const [copiedCode, setCopiedCode] = useState(false);
+
+  // Authentification par mot de passe
+  const [pwInput, setPwInput] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwVisible, setPwVisible] = useState(false);
   
   // Game credentials
   const [roomCode, setRoomCode] = useState<string>('');
@@ -77,8 +94,38 @@ export default function App() {
   // Suivi alerte 30 secondes pour éviter les doublons
   const [warned30s, setWarned30s] = useState(false);
 
+  // 0. Vérification de session existante au démarrage
+  useEffect(() => {
+    if (sessionStorage.getItem('dr_auth') === ACCESS_HASH) {
+      setCurrentScreen('splash');
+    }
+  }, []);
+
+  // Soumission du mot de passe
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pwInput.trim()) return;
+    setPwLoading(true);
+    setPwError('');
+    try {
+      const hash = await hashString(pwInput.trim());
+      if (hash === ACCESS_HASH) {
+        sessionStorage.setItem('dr_auth', ACCESS_HASH);
+        setCurrentScreen('splash');
+      } else {
+        setPwError('Mot de passe incorrect. Veuillez réessayer.');
+        setPwInput('');
+      }
+    } catch {
+      setPwError('Erreur de vérification. Réessayez.');
+    } finally {
+      setPwLoading(false);
+    }
+  };
+
   // 1. Splash screen animation timer
   useEffect(() => {
+    if (currentScreen !== 'splash') return;
     const timer = setTimeout(() => {
       // Check if URL has join code direct e.g., ?join=DR-4821
       const params = new URLSearchParams(window.location.search);
@@ -91,7 +138,7 @@ export default function App() {
       }
     }, 1800);
     return () => clearTimeout(timer);
-  }, []);
+  }, [currentScreen]);
 
   // 2. Real-time active pooling from backend
   useEffect(() => {
@@ -597,7 +644,66 @@ export default function App() {
       </div>
 
       {/* 5. Switch Screens routing */}
-      
+
+      {/* 0. Password screen */}
+      {currentScreen === 'password' && (
+        <div className="flex-1 flex flex-col items-center justify-center bg-[#FAF7ED] p-6 select-none relative overflow-hidden">
+          <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] bg-[#D4AF37]/10 rounded-full filter blur-3xl opacity-60" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-[#0C7645]/5 rounded-full filter blur-3xl opacity-40" />
+
+          <div className="z-10 flex flex-col items-center text-center gap-6 w-full max-w-sm">
+            <div className="relative">
+              <div className="absolute inset-0 border-2 border-[#D4AF37]/20 rounded-[32px] translate-x-2 translate-y-2 pointer-events-none" />
+              <div className="w-24 h-24 bg-white rounded-[32px] shadow-[0_15px_35px_rgba(212,175,55,0.18)] border border-[#D4AF37]/10 flex items-center justify-center p-1.5">
+                <img src="/drlog.png" alt="Logo DupliRoom" className="w-20 h-20 object-contain rounded-[24px]" />
+              </div>
+            </div>
+
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight text-[#1A2A6C] font-serif">DUPLIROOM</h1>
+              <p className="text-xs font-black tracking-widest text-[#D4AF37] uppercase mt-1">Salle de Duplicate</p>
+            </div>
+
+            <div className="w-full bg-white/80 backdrop-blur rounded-2xl shadow-[0_8px_30px_rgba(0,0,0,0.08)] border border-[#D4AF37]/15 p-6">
+              <p className="text-sm font-semibold text-[#1A2A6C] mb-4 text-center">Accès sécurisé — entrez le mot de passe</p>
+              <form onSubmit={handlePasswordSubmit} className="flex flex-col gap-3">
+                <div className="relative">
+                  <input
+                    type={pwVisible ? 'text' : 'password'}
+                    value={pwInput}
+                    onChange={e => { setPwInput(e.target.value); setPwError(''); }}
+                    placeholder="Mot de passe"
+                    className="w-full px-4 py-3 pr-12 rounded-xl border border-[#D4AF37]/30 bg-[#FAF7ED] text-[#1A2A6C] font-medium text-sm focus:outline-none focus:ring-2 focus:ring-[#D4AF37]/40 placeholder:text-gray-400"
+                    autoFocus
+                    disabled={pwLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPwVisible(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#1A2A6C] transition-colors text-lg"
+                    tabIndex={-1}
+                  >
+                    {pwVisible ? '🙈' : '👁'}
+                  </button>
+                </div>
+                {pwError && (
+                  <p className="text-xs text-red-500 font-medium text-center animate-pulse">{pwError}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={pwLoading || !pwInput.trim()}
+                  className="w-full py-3 rounded-xl bg-[#1A2A6C] text-white font-bold text-sm tracking-wide hover:bg-[#1A2A6C]/90 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {pwLoading ? 'Vérification...' : 'Entrer'}
+                </button>
+              </form>
+            </div>
+
+            <p className="text-xs text-gray-400">Contactez l'administrateur pour obtenir l'accès</p>
+          </div>
+        </div>
+      )}
+
       {/* A. Splash screen */}
       {currentScreen === 'splash' && (
         <div className="flex-1 flex flex-col items-center justify-center bg-[#FAF7ED] p-6 select-none relative overflow-hidden" id="splash-screen">
