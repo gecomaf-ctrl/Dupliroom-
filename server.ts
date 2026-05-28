@@ -17,9 +17,10 @@ import {
 } from './src/scrabble.js';
 import { Tournament, Player, Round, Submission, BoardCell, MoveHistory } from './src/types.js';
 import { createClient } from '@supabase/supabase-js';
+import ws from 'ws';
 
 const app = express();
-const PORT = 3000;
+const PORT = 5000;
 
 app.use(express.json());
 
@@ -68,7 +69,9 @@ const rawSupabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 
 const { cleanUrl: supabaseUrl, cleanKey: supabaseAnonKey } = sanitizeSupabaseConfig(rawSupabaseUrl, rawSupabaseAnonKey);
 
-const supabase = (supabaseUrl && supabaseAnonKey) ? createClient(supabaseUrl, supabaseAnonKey) : null;
+const supabase = (supabaseUrl && supabaseAnonKey) ? createClient(supabaseUrl, supabaseAnonKey, {
+  realtime: { transport: ws }
+}) : null;
 
 // In-memory local cache mirroring Supabase state for instant performance and polling responses
 const tournaments: { [code: string]: Tournament } = {};
