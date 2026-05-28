@@ -1,0 +1,5 @@
+@import "tailwindcss";
+
+@theme {
+  --color-dupli-gold: #D4AF37;
+}

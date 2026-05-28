@@ -1,0 +1,8 @@
+{
+  "name": "Remix: DupliRoom",
+  "description": "Official platform to organize, referee, and play duplicate Scrabble tournaments live or remotely with automated scoring and real-time rankings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
