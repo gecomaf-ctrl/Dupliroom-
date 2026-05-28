@@ -6,6 +6,7 @@ import { RotateCw, SquarePower, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react'
 interface ScrabbleBoardProps {
   boardState: BoardCell[][];
   tempPlacement: { [key: string]: string }; // "r,c" -> letter
+  submittedPlacement?: { [key: string]: string }; // "r,c" -> letter (locked after submission)
   selectedRackLetter: { letter: string; index: number } | null;
   onCellClick: (r: number, c: number) => void;
   onClearTemp: () => void;
@@ -15,6 +16,7 @@ interface ScrabbleBoardProps {
 export function ScrabbleBoard({
   boardState,
   tempPlacement,
+  submittedPlacement = {},
   selectedRackLetter,
   onCellClick,
   onClearTemp,
@@ -29,10 +31,14 @@ export function ScrabbleBoard({
   // Build temporary 15x15 board to compute preview scores
   const previewGrid = boardState.map((row, r) =>
     row.map((cell, c) => {
-      const tempLetter = tempPlacement[`${r},${c}`];
+      const key = `${r},${c}`;
+      const tempLetter = tempPlacement[key];
+      const submittedLetter = submittedPlacement[key];
+      const activeLetter = tempLetter || submittedLetter;
       return {
-        letter: tempLetter || cell.letter,
+        letter: activeLetter || cell.letter,
         isTemp: !!tempLetter,
+        isSubmitted: !tempLetter && !!submittedLetter,
         isTop: cell.isTopLetter,
         roundPlaced: cell.roundPlaced
       };
@@ -203,6 +209,10 @@ export function ScrabbleBoard({
                       cellStyle = isJoker
                         ? "bg-amber-100 text-rose-650 border border-rose-350 font-black shadow-md scale-[1.03] animate-pulse"
                         : "bg-amber-300 text-amber-950 font-black shadow-md border-2 border-amber-600 scale-[1.03] animate-pulse";
+                    } else if (cell.isSubmitted) {
+                      cellStyle = isJoker
+                        ? "bg-indigo-100 text-indigo-700 border-2 border-indigo-400 font-black shadow-md"
+                        : "bg-indigo-200 text-indigo-900 border-2 border-indigo-500 font-black shadow-md";
                     } else if (cell.isTop) {
                       cellStyle = isJoker
                         ? "bg-rose-50 text-rose-700 border border-rose-250 font-extrabold shadow-sm"
@@ -223,7 +233,7 @@ export function ScrabbleBoard({
                         
                         {/* Valeur de la lettre (coefficient) */}
                         <span className={`absolute bottom-[1px] right-[2px] text-[7.5px] font-mono leading-none font-bold ${
-                          cell.isTemp ? 'text-amber-950/60' : 'text-slate-500/80'
+                          cell.isTemp ? 'text-amber-950/60' : cell.isSubmitted ? 'text-indigo-700/70' : 'text-slate-500/80'
                         }`}>
                           {ptValue}
                         </span>
@@ -233,7 +243,12 @@ export function ScrabbleBoard({
                             P
                           </span>
                         )}
-                        {!cell.isTemp && isJoker && (
+                        {cell.isSubmitted && (
+                          <span className="absolute top-[1.5px] left-[2.5px] text-[6.5px] font-black tracking-tighter text-indigo-700 bg-indigo-100/70 px-0.5 rounded uppercase leading-none scale-90" title="Validé">
+                            ✓
+                          </span>
+                        )}
+                        {!cell.isTemp && !cell.isSubmitted && isJoker && (
                           <span className="absolute top-[1.5px] left-[2.5px] text-[7px] font-extrabold text-rose-500 leading-none">
                             ★
                           </span>
@@ -267,7 +282,7 @@ export function ScrabbleBoard({
                       id={`cell-${r}-${c}`}
                       key={`r${r}c${c}`}
                       onClick={() => onCellClick(r, c)}
-                      disabled={cell.letter && !cell.isTemp} // Can only clear temporary letter or place new ones
+                      disabled={cell.letter && (!cell.isTemp || cell.isSubmitted)} // Can only clear temporary letter or place new ones; submitted cells are locked
                       className={`aspect-square rounded-sm text-center flex flex-col items-center justify-center cursor-pointer transition-all border border-emerald-950/10 focus:outline-none overflow-hidden relative group select-none ${cellStyle} ${
                         cellSelected && !cell.letter ? 'hover:bg-emerald-300 hover:scale-[1.05]' : ''
                       }`}

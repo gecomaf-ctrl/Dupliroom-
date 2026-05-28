@@ -51,6 +51,7 @@ export default function App() {
 
   // Board temp actions
   const [tempPlacement, setTempPlacement] = useState<{ [key: string]: string }>({});
+  const [submittedPlacement, setSubmittedPlacement] = useState<{ [key: string]: string }>({});
   const [selectedRackLetter, setSelectedRackLetter] = useState<{ letter: string; index: number } | null>(null);
   const [jokerSelection, setJokerSelection] = useState<{ r: number; c: number } | null>(null);
 
@@ -104,9 +105,10 @@ export default function App() {
           const data: Tournament = await res.json();
           if (!active) return;
           
-          // Clear temporary letters if next round starts
+          // Clear temporary and submitted letters if next round starts
           if (tournament && data.currentRoundNumber > tournament.currentRoundNumber) {
             setTempPlacement({});
+            setSubmittedPlacement({});
             setSelectedRackLetter(null);
             triggerAlert(`Nouveau coup démarré ! Tirage du coup ${data.currentRoundNumber}`);
           }
@@ -354,7 +356,8 @@ export default function App() {
         const data = await res.json();
         triggerAlert(`Votre mot "${word}" (${points} pts) a été enregistré.`);
         
-        // Clear temp placement on client side after submission completes
+        // Keep the submitted placement visible on the board; move tempPlacement to submittedPlacement
+        setSubmittedPlacement({ ...tempPlacement });
         setTempPlacement({});
         setSelectedRackLetter(null);
       } else {
@@ -370,10 +373,12 @@ export default function App() {
   const activeRound = tournament?.rounds[tournament?.currentRoundNumber];
   const roundLetters = activeRound?.letters || '';
 
-  // Get active rack list with placed letters subtracted
+  // Get active rack list with placed letters subtracted (from both temp and submitted placements)
   const getAvailableRackLetters = () => {
     let arr = roundLetters.split('');
-    Object.values(tempPlacement).forEach(placedLetter => {
+    // Combine both placements: submitted letters are locked, temp letters are in-progress
+    const allPlaced = { ...submittedPlacement, ...tempPlacement };
+    Object.values(allPlaced).forEach(placedLetter => {
       const letterStr = placedLetter as string;
       const isJoker = letterStr === letterStr.toLowerCase() && letterStr !== letterStr.toUpperCase();
       const literalToLookFor = isJoker ? '?' : letterStr;
@@ -451,6 +456,7 @@ export default function App() {
     setUsername('');
     setTournament(null);
     setTempPlacement({});
+    setSubmittedPlacement({});
     setSelectedRackLetter(null);
     setCurrentScreen('accueil');
   };
@@ -1303,6 +1309,7 @@ export default function App() {
               <ScrabbleBoard
                 boardState={tournament.boardState}
                 tempPlacement={tempPlacement}
+                submittedPlacement={submittedPlacement}
                 selectedRackLetter={selectedRackLetter}
                 onCellClick={handleCellClick}
                 onClearTemp={handleRecallAllTemp}
@@ -1416,29 +1423,60 @@ export default function App() {
                     {tournament.moveHistory.length === 0 ? (
                       <p className="text-slate-400 text-center py-6 italic text-xs font-semibold">Le premier coup n'a pas encore été validé.</p>
                     ) : (
-                      [...tournament.moveHistory].reverse().map((m) => (
-                        <div key={m.roundNumber} className="flex flex-col gap-1 text-xs p-3 bg-stone-50 border border-transparent hover:border-gray-100 rounded-2xl transition-colors">
-                          <div className="flex items-center justify-between">
-                            <span className="font-extrabold text-stone-600">Coup {m.roundNumber}</span>
-                            <span className="font-mono text-[10px] bg-[#FAF7ED] border border-[#D4AF37]/20 px-1.5 py-0.5 rounded font-black tracking-wider text-[#c19532]">
-                              {m.letters}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between mt-1">
-                            <span className="font-black text-[#1A2A6C] tracking-wide uppercase text-sm">
-                              {m.word || '—'}
-                            </span>
-                            <div className="flex items-center gap-1.5 font-mono">
-                              <span className="bg-[#0C7645]/10 text-[#0B673C] font-extrabold px-2 py-0.5 rounded text-[10px]">
-                                {m.points} pts
-                              </span>
-                              <span className="bg-stone-200 text-stone-700 font-bold px-1.5 py-0.5 rounded text-[10px]">
-                                {m.coords || ''}
+                      [...tournament.moveHistory].reverse().map((m) => {
+                        const playerSub = !isMeArbitre ? tournament.submissions?.[m.roundNumber]?.[playerId] : null;
+                        return (
+                          <div key={m.roundNumber} className="flex flex-col gap-1.5 text-xs p-3 bg-stone-50 border border-transparent hover:border-gray-100 rounded-2xl transition-colors">
+                            <div className="flex items-center justify-between">
+                              <span className="font-extrabold text-stone-600">Coup {m.roundNumber}</span>
+                              <span className="font-mono text-[10px] bg-[#FAF7ED] border border-[#D4AF37]/20 px-1.5 py-0.5 rounded font-black tracking-wider text-[#c19532]">
+                                {m.letters}
                               </span>
                             </div>
+                            {/* TOP du coup */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-[#D4AF37] bg-[#FAF7ED] px-1.5 py-0.5 rounded">TOP</span>
+                                <span className="font-black text-[#1A2A6C] tracking-wide uppercase">
+                                  {m.word || '—'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5 font-mono">
+                                <span className="bg-[#0C7645]/10 text-[#0B673C] font-extrabold px-2 py-0.5 rounded text-[10px]">
+                                  {m.points} pts
+                                </span>
+                                <span className="bg-stone-200 text-stone-700 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                                  {m.coords || ''}
+                                </span>
+                              </div>
+                            </div>
+                            {/* Mot validé du joueur */}
+                            {playerSub && (
+                              <div className="flex items-center justify-between border-t border-stone-200/60 pt-1.5 mt-0.5">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[9px] font-black uppercase tracking-widest text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">MON MOT</span>
+                                  <span className={`font-black tracking-wide uppercase ${playerSub.accepted ? 'text-slate-700' : 'text-red-500 line-through'}`}>
+                                    {playerSub.word || '—'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 font-mono">
+                                  <span className={`font-extrabold px-2 py-0.5 rounded text-[10px] ${playerSub.accepted ? 'bg-indigo-50 text-indigo-600' : 'bg-red-50 text-red-500'}`}>
+                                    {playerSub.points} pts
+                                  </span>
+                                  {playerSub.loss > 0 && (
+                                    <span className="bg-red-50 text-red-500 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                                      -{playerSub.loss}
+                                    </span>
+                                  )}
+                                  <span className="bg-stone-200 text-stone-700 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                                    {playerSub.coords || ''}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 </div>
