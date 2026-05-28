@@ -74,6 +74,9 @@ export default function App() {
   // Client side audio alert check to keep track of notification events (unobtrusive UI alerts)
   const [alerts, setAlerts] = useState<string[]>([]);
 
+  // Suivi alerte 30 secondes pour éviter les doublons
+  const [warned30s, setWarned30s] = useState(false);
+
   // 1. Splash screen animation timer
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -148,6 +151,27 @@ export default function App() {
       clearInterval(interval);
     };
   }, [roomCode, currentScreen, tournament]);
+
+  // Alerte visuelle à 30 secondes restantes (une seule fois par coup)
+  useEffect(() => {
+    if (!activeRound || isMeArbitre) return;
+
+    // Réinitialiser l'alerte au début d'un nouveau coup
+    if (activeRound.status === 'composing' && activeRound.timerLeft === activeRound.duration) {
+      setWarned30s(false);
+    }
+
+    // Déclencher l'alerte une seule fois quand on passe sous 30 secondes
+    if (
+      activeRound.status === 'composing' &&
+      activeRound.timerLeft > 0 &&
+      activeRound.timerLeft <= 30 &&
+      !warned30s
+    ) {
+      setWarned30s(true);
+      triggerAlert(`⏳ Plus que ${activeRound.timerLeft}s ! Validez votre coup !`);
+    }
+  }, [activeRound?.timerLeft]);
 
   // Player online heartbeat pulse
   useEffect(() => {
@@ -1343,12 +1367,41 @@ export default function App() {
                     // Récupérer le mot soumis depuis l'état local
                     const submittedWord = tournament.submissions?.[tournament.currentRoundNumber]?.[playerId];
 
+                    // Calcul de la barre de progression du chrono
+                    const timerLeft = activeRound.timerLeft;
+                    const timerDuration = activeRound.duration || 1;
+                    const timerPct = Math.max(0, Math.min(100, (timerLeft / timerDuration) * 100));
+                    const timerColor =
+                      !isComposing ? 'bg-zinc-300'
+                      : timerLeft <= 30 ? 'bg-red-500'
+                      : timerLeft <= 60 ? 'bg-amber-400'
+                      : 'bg-emerald-500';
+                    const timerTextColor =
+                      !isComposing ? 'text-zinc-400'
+                      : timerLeft <= 30 ? 'text-red-600'
+                      : timerLeft <= 60 ? 'text-amber-600'
+                      : 'text-emerald-700';
+
                     return (
                       <div className={`flex flex-col gap-2 mt-2 rounded-xl p-3 animate-fade-in text-center border ${
                         hasSubmitted && !previewWord
                           ? 'bg-indigo-50/70 border-indigo-200/60'
                           : 'bg-stone-50 border-stone-200/50'
                       }`}>
+
+                        {/* Barre de progression du chronomètre */}
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="flex-1 h-2 bg-stone-200/70 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-1000 ease-linear ${timerColor} ${timerLeft <= 30 && isComposing ? 'animate-pulse' : ''}`}
+                              style={{ width: `${timerPct}%` }}
+                            />
+                          </div>
+                          <span className={`font-mono font-black text-[11px] tabular-nums w-10 text-right shrink-0 ${timerTextColor} ${timerLeft <= 30 && isComposing ? 'animate-pulse' : ''}`}>
+                            {Math.floor(timerLeft / 60).toString().padStart(2, '0')}:{(timerLeft % 60).toString().padStart(2, '0')}
+                          </span>
+                        </div>
+
                         {/* En-tête : mot en cours ou soumis */}
                         <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-stone-600 border-b border-stone-200/40 pb-2 mb-1.5 font-medium select-none">
                           {hasSubmitted && !previewWord ? (
