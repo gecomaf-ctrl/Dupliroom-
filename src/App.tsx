@@ -26,7 +26,9 @@ import {
   Home,
   Settings,
   User,
-  Copy
+  Copy,
+  Download,
+  CheckCircle
 } from 'lucide-react';
 import { Tournament, Player, Submission } from './types.js';
 import { ScrabbleBoard } from './components/ScrabbleBoard.tsx';
@@ -57,6 +59,10 @@ export default function App() {
   const [pwError, setPwError] = useState('');
   const [pwLoading, setPwLoading] = useState(false);
   const [pwVisible, setPwVisible] = useState(false);
+
+  // PWA Install prompt
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
   
   // Game credentials
   const [roomCode, setRoomCode] = useState<string>('');
@@ -100,6 +106,38 @@ export default function App() {
       setCurrentScreen('splash');
     }
   }, []);
+
+  // PWA: capture l'événement d'installation du navigateur
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    const installed = () => {
+      setIsAppInstalled(true);
+      setInstallPrompt(null);
+    };
+    // Déjà installée si mode standalone
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsAppInstalled(true);
+    }
+    window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', installed);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('appinstalled', installed);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setIsAppInstalled(true);
+      setInstallPrompt(null);
+    }
+  };
 
   // Soumission du mot de passe
   const handlePasswordSubmit = async (e: React.FormEvent) => {
@@ -228,27 +266,6 @@ export default function App() {
     }
   };
 
-  // Alerte visuelle + sonore à 30 secondes restantes (une seule fois par coup)
-  useEffect(() => {
-    if (!activeRound || isMeArbitre) return;
-
-    // Réinitialiser l'alerte au début d'un nouveau coup
-    if (activeRound.status === 'composing' && activeRound.timerLeft === activeRound.duration) {
-      setWarned30s(false);
-    }
-
-    // Déclencher l'alerte une seule fois quand on passe sous 30 secondes
-    if (
-      activeRound.status === 'composing' &&
-      activeRound.timerLeft > 0 &&
-      activeRound.timerLeft <= 30 &&
-      !warned30s
-    ) {
-      setWarned30s(true);
-      triggerAlert(`⏳ Plus que ${activeRound.timerLeft}s ! Validez votre coup !`);
-      playAlertBeep();
-    }
-  }, [activeRound?.timerLeft]);
 
   // Player online heartbeat pulse
   useEffect(() => {
@@ -473,6 +490,25 @@ export default function App() {
   // 4. Interactive Board Grid Click logic (Placement mechanics)
   const activeRound = tournament?.rounds[tournament?.currentRoundNumber];
   const roundLetters = activeRound?.letters || '';
+
+  // Alerte visuelle + sonore à 30 secondes restantes (une seule fois par coup)
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (!activeRound || isMeArbitre) return;
+    if (activeRound.status === 'composing' && activeRound.timerLeft === activeRound.duration) {
+      setWarned30s(false);
+    }
+    if (
+      activeRound.status === 'composing' &&
+      activeRound.timerLeft > 0 &&
+      activeRound.timerLeft <= 30 &&
+      !warned30s
+    ) {
+      setWarned30s(true);
+      triggerAlert(`⏳ Plus que ${activeRound.timerLeft}s ! Validez votre coup !`);
+      playAlertBeep();
+    }
+  }, [activeRound?.timerLeft]);
 
   // Get active rack list with placed letters subtracted (from both temp and submitted placements)
   const getAvailableRackLetters = () => {
@@ -840,12 +876,50 @@ export default function App() {
               <span className="text-[10px] font-black text-gray-400 mt-1">Solo</span>
             </button>
 
-            {/* 4. Settings */}
-            <div className="flex flex-col items-center justify-center flex-1 cursor-pointer opacity-50">
-              <Settings size={22} className="text-gray-400" />
-              <span className="text-[10px] font-black text-gray-400 mt-1">Settings</span>
-            </div>
+            {/* 4. Install / Settings */}
+            {installPrompt && !isAppInstalled ? (
+              <button
+                onClick={handleInstallApp}
+                className="flex flex-col items-center justify-center flex-1 cursor-pointer group"
+              >
+                <div className="w-9 h-9 rounded-[14px] bg-[#1A2A6C] flex items-center justify-center shadow-[0_4px_12px_rgba(26,42,108,0.3)] group-active:scale-95 transition-transform">
+                  <Download size={16} className="text-white" />
+                </div>
+                <span className="text-[10px] font-black text-[#1A2A6C] mt-1">Installer</span>
+              </button>
+            ) : isAppInstalled ? (
+              <div className="flex flex-col items-center justify-center flex-1">
+                <CheckCircle size={22} className="text-emerald-500" />
+                <span className="text-[10px] font-black text-emerald-500 mt-1">Installée</span>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center flex-1 opacity-40">
+                <Settings size={22} className="text-gray-400" />
+                <span className="text-[10px] font-black text-gray-400 mt-1">Settings</span>
+              </div>
+            )}
           </div>
+
+          {/* Bannière d'installation flottante (si prompt dispo et non installée) */}
+          {installPrompt && !isAppInstalled && (
+            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-3rem)] max-w-sm z-50 animate-[fadeIn_0.4s_ease-out]">
+              <div className="bg-[#1A2A6C] text-white rounded-2xl shadow-[0_8px_30px_rgba(26,42,108,0.35)] p-4 flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center shrink-0">
+                  <img src="/drlog.png" alt="DupliRoom" className="w-8 h-8 object-contain rounded-lg" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold leading-tight">Installer DupliRoom</p>
+                  <p className="text-[10px] text-white/60 mt-0.5 leading-tight">Accès rapide depuis votre écran d'accueil</p>
+                </div>
+                <button
+                  onClick={handleInstallApp}
+                  className="bg-[#D4AF37] text-[#1A2A6C] text-[11px] font-black px-3 py-1.5 rounded-xl shrink-0 active:scale-95 transition-transform"
+                >
+                  Installer
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
