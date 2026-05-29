@@ -997,8 +997,11 @@ async function startServer() {
     fs.mkdirSync(pPublicDir, { recursive: true });
   }
 
+  // Les icônes optimisées (drlog.png 512x512 et drlog-192.png 192x192) sont gérées
+  // directement dans public/ — on ne recopie l'original non compressé que si l'icône est absente
   const srcLogoDrMain = path.join(process.cwd(), 'assets', '.aistudio', 'drlog.png');
   const destLogoDrMain = path.join(pPublicDir, 'drlog.png');
+  const dest192 = path.join(pPublicDir, 'drlog-192.png');
 
   const isRealFile = (filePath: string) => {
     try {
@@ -1009,16 +1012,14 @@ async function startServer() {
   };
 
   try {
-    if (isRealFile(srcLogoDrMain)) {
-      const size = fs.statSync(srcLogoDrMain).size;
-      console.log(`[PWA Startup] Copying drlog.png (${size} bytes) from assets to public folder...`);
+    // Ne copier que si le fichier de destination est absent (pas d'écrasement de la version optimisée)
+    if (!isRealFile(destLogoDrMain) && isRealFile(srcLogoDrMain)) {
+      console.log(`[PWA Startup] drlog.png absent — copie depuis assets...`);
       fs.copyFileSync(srcLogoDrMain, destLogoDrMain);
-    } else {
-      // Look for any fallback
-      if (fs.existsSync(srcLogoDrMain)) {
-        fs.copyFileSync(srcLogoDrMain, destLogoDrMain);
-      }
-      console.log(`[PWA Startup] Fallback copying executed for drlog.png in public`);
+    }
+    if (!isRealFile(dest192) && isRealFile(srcLogoDrMain)) {
+      console.log(`[PWA Startup] drlog-192.png absent — copie de secours depuis assets...`);
+      fs.copyFileSync(srcLogoDrMain, dest192);
     }
   } catch (copyErr) {
     console.error(`[PWA Startup] Failed to copy logodr asset files:`, copyErr);
