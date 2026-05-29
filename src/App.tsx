@@ -63,6 +63,12 @@ export default function App() {
   // PWA Install prompt
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [isAppInstalled, setIsAppInstalled] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false);
+
+  // Détection plateforme pour les instructions d'installation
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isAndroid = /android/i.test(navigator.userAgent);
+  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
   
   // Game credentials
   const [roomCode, setRoomCode] = useState<string>('');
@@ -130,12 +136,17 @@ export default function App() {
   }, []);
 
   const handleInstallApp = async () => {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    const { outcome } = await installPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setIsAppInstalled(true);
-      setInstallPrompt(null);
+    if (installPrompt) {
+      // Prompt natif disponible (Chrome/Edge Android & Desktop)
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setIsAppInstalled(true);
+        setInstallPrompt(null);
+      }
+    } else {
+      // Pas de prompt natif → afficher les instructions manuelles
+      setShowInstallModal(true);
     }
   };
 
@@ -877,7 +888,12 @@ export default function App() {
             </button>
 
             {/* 4. Install / Settings */}
-            {installPrompt && !isAppInstalled ? (
+            {isAppInstalled ? (
+              <div className="flex flex-col items-center justify-center flex-1">
+                <CheckCircle size={22} className="text-emerald-500" />
+                <span className="text-[10px] font-black text-emerald-500 mt-1">Installée</span>
+              </div>
+            ) : (
               <button
                 onClick={handleInstallApp}
                 className="flex flex-col items-center justify-center flex-1 cursor-pointer group"
@@ -887,39 +903,88 @@ export default function App() {
                 </div>
                 <span className="text-[10px] font-black text-[#1A2A6C] mt-1">Installer</span>
               </button>
-            ) : isAppInstalled ? (
-              <div className="flex flex-col items-center justify-center flex-1">
-                <CheckCircle size={22} className="text-emerald-500" />
-                <span className="text-[10px] font-black text-emerald-500 mt-1">Installée</span>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center flex-1 opacity-40">
-                <Settings size={22} className="text-gray-400" />
-                <span className="text-[10px] font-black text-gray-400 mt-1">Settings</span>
-              </div>
             )}
           </div>
+        </div>
+      )}
 
-          {/* Bannière d'installation flottante (si prompt dispo et non installée) */}
-          {installPrompt && !isAppInstalled && (
-            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[calc(100%-3rem)] max-w-sm z-50 animate-[fadeIn_0.4s_ease-out]">
-              <div className="bg-[#1A2A6C] text-white rounded-2xl shadow-[0_8px_30px_rgba(26,42,108,0.35)] p-4 flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center shrink-0">
-                  <img src="/drlog.png" alt="DupliRoom" className="w-8 h-8 object-contain rounded-lg" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold leading-tight">Installer DupliRoom</p>
-                  <p className="text-[10px] text-white/60 mt-0.5 leading-tight">Accès rapide depuis votre écran d'accueil</p>
-                </div>
-                <button
-                  onClick={handleInstallApp}
-                  className="bg-[#D4AF37] text-[#1A2A6C] text-[11px] font-black px-3 py-1.5 rounded-xl shrink-0 active:scale-95 transition-transform"
-                >
-                  Installer
-                </button>
+      {/* Modal d'instructions d'installation */}
+      {showInstallModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]"
+          onClick={() => setShowInstallModal(false)}
+        >
+          <div
+            className="w-full max-w-sm mx-4 mb-6 bg-white rounded-3xl shadow-2xl overflow-hidden animate-[slideUp_0.3s_ease-out]"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="bg-[#1A2A6C] px-5 pt-5 pb-4 flex items-center gap-3">
+              <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center shrink-0">
+                <img src="/drlog.png" alt="DupliRoom" className="w-10 h-10 object-contain rounded-xl" />
               </div>
+              <div>
+                <p className="text-white font-bold text-sm">Installer DupliRoom</p>
+                <p className="text-white/60 text-[11px]">Accès rapide depuis votre écran d'accueil</p>
+              </div>
+              <button onClick={() => setShowInstallModal(false)} className="ml-auto text-white/50 hover:text-white text-xl leading-none">×</button>
             </div>
-          )}
+
+            {/* Instructions selon la plateforme */}
+            <div className="px-5 py-4 space-y-3">
+              {isIOS || isSafari ? (
+                <>
+                  <p className="text-xs font-bold text-[#1A2A6C] uppercase tracking-wide">Sur iPhone / iPad (Safari)</p>
+                  {[
+                    { step: '1', text: 'Appuyez sur le bouton Partager en bas de Safari', icon: '⬆️' },
+                    { step: '2', text: 'Faites défiler et appuyez sur « Sur l\'écran d\'accueil »', icon: '📲' },
+                    { step: '3', text: 'Confirmez en appuyant sur « Ajouter »', icon: '✅' },
+                  ].map(s => (
+                    <div key={s.step} className="flex items-start gap-3 bg-[#FAF7ED] rounded-xl p-3">
+                      <span className="text-lg leading-none">{s.icon}</span>
+                      <p className="text-xs text-gray-700 font-medium leading-relaxed">{s.text}</p>
+                    </div>
+                  ))}
+                </>
+              ) : isAndroid ? (
+                <>
+                  <p className="text-xs font-bold text-[#1A2A6C] uppercase tracking-wide">Sur Android (Chrome)</p>
+                  {[
+                    { step: '1', text: 'Appuyez sur ⋮ (menu 3 points) en haut à droite', icon: '⋮' },
+                    { step: '2', text: 'Appuyez sur « Ajouter à l\'écran d\'accueil »', icon: '📲' },
+                    { step: '3', text: 'Confirmez en appuyant sur « Ajouter »', icon: '✅' },
+                  ].map(s => (
+                    <div key={s.step} className="flex items-start gap-3 bg-[#FAF7ED] rounded-xl p-3">
+                      <span className="text-lg leading-none font-bold">{s.icon}</span>
+                      <p className="text-xs text-gray-700 font-medium leading-relaxed">{s.text}</p>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-bold text-[#1A2A6C] uppercase tracking-wide">Sur ordinateur (Chrome / Edge)</p>
+                  {[
+                    { text: 'Cliquez sur l\'icône ⊕ dans la barre d\'adresse (à droite)', icon: '🖥️' },
+                    { text: 'Ou : Menu ⋮ → « Installer DupliRoom »', icon: '📥' },
+                  ].map((s, i) => (
+                    <div key={i} className="flex items-start gap-3 bg-[#FAF7ED] rounded-xl p-3">
+                      <span className="text-lg leading-none">{s.icon}</span>
+                      <p className="text-xs text-gray-700 font-medium leading-relaxed">{s.text}</p>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+
+            <div className="px-5 pb-5">
+              <button
+                onClick={() => setShowInstallModal(false)}
+                className="w-full py-3 bg-[#1A2A6C] text-white font-bold text-sm rounded-2xl active:scale-95 transition-transform"
+              >
+                Compris !
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
