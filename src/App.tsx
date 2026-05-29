@@ -218,6 +218,8 @@ export default function App() {
             const newRound = data.rounds[data.currentRoundNumber];
             if (oldRound && newRound && oldRound.status !== 'ended' && newRound.status === 'ended') {
               triggerAlert(`TOP validé pour coup ${data.currentRoundNumber} : ${newRound.topWord} (${newRound.topPoints} pts) !`);
+              // Le mot joué disparaît dès que le TOP est révélé
+              setSubmittedPlacement({});
             }
           }
 
@@ -474,7 +476,26 @@ export default function App() {
 
   // Player Submit Proposed word
   const handlePlayerSubmitProposed = async (word: string, points: number, coords: string) => {
-    if (!roomCode || !playerId) return;
+    if (!roomCode || !playerId || !tournament) return;
+
+    // Validation crossword obligatoire à partir du coup 2
+    const isBoardEmpty = !tournament.boardState.some(row => row.some(cell => cell.letter !== null));
+    if (!isBoardEmpty) {
+      const isConnected = Object.keys(tempPlacement).some(key => {
+        const [r, c] = key.split(',').map(Number);
+        return (
+          (r > 0  && tournament.boardState[r - 1][c].letter !== null) ||
+          (r < 14 && tournament.boardState[r + 1][c].letter !== null) ||
+          (c > 0  && tournament.boardState[r][c - 1].letter !== null) ||
+          (c < 14 && tournament.boardState[r][c + 1].letter !== null)
+        );
+      });
+      if (!isConnected) {
+        alert("Placement invalide : votre mot doit s'appuyer sur une lettre ou un mot déjà posé sur le plateau (règle du crossword).");
+        return;
+      }
+    }
+
     try {
       const res = await fetch(`/api/tournament/${roomCode}/player/submit`, {
         method: 'POST',
