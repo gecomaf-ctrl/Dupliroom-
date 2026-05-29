@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dupliroom-v1';
+const CACHE_NAME = 'dupliroom-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
