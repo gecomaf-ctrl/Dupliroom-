@@ -112,12 +112,46 @@ export default function App() {
   // Suivi alerte 30 secondes pour éviter les doublons
   const [warned30s, setWarned30s] = useState(false);
 
-  // 0. Vérification de session existante au démarrage (ignorée en mode invité)
+  // 0. Vérification de session existante au démarrage
+  //    Priorité 1 : localStorage → reprendre une partie en cours
+  //    Priorité 2 : sessionStorage auth → accueil normal
   useEffect(() => {
-    if (isGuestMode) return;
-    if (sessionStorage.getItem('dr_auth') === ACCESS_HASH) {
-      setCurrentScreen('splash');
-    }
+    const tryRestore = async () => {
+      const saved = localStorage.getItem('dr_session');
+      if (saved) {
+        try {
+          const { roomCode: savedCode, playerId: savedId, username: savedName } = JSON.parse(saved);
+          if (savedCode && savedId) {
+            const res = await fetch(`/api/tournament/${savedCode}/status`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.players && data.players[savedId]) {
+                setRoomCode(savedCode);
+                setPlayerId(savedId);
+                setUsername(savedName || '');
+                setTournament(data);
+                setJoinData(prev => ({ ...prev, code: savedCode }));
+                setCurrentScreen('partie');
+                return; // restauré → on n'entre pas dans le flow normal
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[DupliRoom] Restauration de session échouée :', e);
+        }
+        localStorage.removeItem('dr_session');
+      }
+
+      // Mode invité sans session sauvée → rejoindre (état initial déjà correct)
+      if (isGuestMode) return;
+
+      // Utilisateur régulier : vérifier le token d'auth
+      if (sessionStorage.getItem('dr_auth') === ACCESS_HASH) {
+        setCurrentScreen('splash');
+      }
+    };
+
+    tryRestore();
   }, []);
 
   // PWA: capture l'événement d'installation du navigateur
@@ -304,7 +338,18 @@ export default function App() {
     return () => clearInterval(interval);
   }, [roomCode, playerId]);
 
-
+  // Bloquer le bouton retour navigateur quand le joueur est en partie
+  // (ou sur l'écran rejoindre en mode invité — empêche d'aller nulle part)
+  useEffect(() => {
+    const shouldBlock = currentScreen === 'partie' || (isGuestMode && currentScreen === 'rejoindre');
+    if (!shouldBlock) return;
+    window.history.pushState(null, '', window.location.href);
+    const handler = () => {
+      window.history.pushState(null, '', window.location.href);
+    };
+    window.addEventListener('popstate', handler);
+    return () => window.removeEventListener('popstate', handler);
+  }, [currentScreen, isGuestMode]);
 
   // Helper to trigger live banners
   const triggerAlert = (message: string) => {
@@ -327,6 +372,13 @@ export default function App() {
         setRoomCode(data.tournamentCode);
         setPlayerId(data.playerId);
         setUsername(formData.arbitreName);
+
+        // Sauvegarder la session pour permettre la reprise après rafraîchissement
+        localStorage.setItem('dr_session', JSON.stringify({
+          roomCode: data.tournamentCode,
+          playerId: data.playerId,
+          username: formData.arbitreName
+        }));
 
         // Fetch full tournament state immediately
         const statusRes = await fetch(`/api/tournament/${data.tournamentCode}/status`);
@@ -362,7 +414,14 @@ export default function App() {
         setRoomCode(data.tournamentCode);
         setPlayerId(data.playerId);
         setUsername(joinData.pseudo);
-        
+
+        // Sauvegarder la session pour permettre la reprise après rafraîchissement
+        localStorage.setItem('dr_session', JSON.stringify({
+          roomCode: data.tournamentCode,
+          playerId: data.playerId,
+          username: joinData.pseudo
+        }));
+
         // Fetch full tournament
         const statusRes = await fetch(`/api/tournament/${data.tournamentCode}/status`);
         const statusData = await statusRes.json();
@@ -635,6 +694,7 @@ export default function App() {
 
   // Reset to original screen
   const handleRestartNew = () => {
+    localStorage.removeItem('dr_session');
     setRoomCode('');
     setPlayerId('');
     setUsername('');
