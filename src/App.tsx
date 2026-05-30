@@ -259,8 +259,10 @@ export default function App() {
             const newRound = data.rounds[data.currentRoundNumber];
             if (oldRound && newRound && oldRound.status !== 'ended' && newRound.status === 'ended') {
               triggerAlert(`TOP validé pour coup ${data.currentRoundNumber} : ${newRound.topWord} (${newRound.topPoints} pts) !`);
-              // Le mot joué disparaît dès que le TOP est révélé
+              // Retirer le mot joué du plateau ET du chevalet — fin de round
               setSubmittedPlacement({});
+              setTempPlacement({});
+              setSelectedRackLetter(null);
             }
           }
 
@@ -545,20 +547,34 @@ export default function App() {
   const handlePlayerSubmitProposed = async (word: string, points: number, coords: string) => {
     if (!roomCode || !playerId || !tournament) return;
 
-    // Validation crossword obligatoire à partir du coup 2
+    const placedKeys = Object.keys(tempPlacement);
+    if (placedKeys.length === 0) return;
+
     const isBoardEmpty = !tournament.boardState.some(row => row.some(cell => cell.letter !== null));
+
+    // ── Coup 1 : le mot doit obligatoirement passer par H8 (ligne 7, colonne 7) ──
+    if (isBoardEmpty) {
+      const passesH8 = placedKeys.some(k => k === '7,7');
+      if (!passesH8) {
+        alert("Coup 1 : votre mot doit obligatoirement passer par la case centrale H8.");
+        return;
+      }
+    }
+
+    // ── Coup 2+ : règle du crossword — le mot doit toucher au moins une lettre existante ──
+    // On vérifie adjacence ET chevauchement (lettre sur le plateau dans la ligne du mot)
     if (!isBoardEmpty) {
-      const isConnected = Object.keys(tempPlacement).some(key => {
+      const isConnected = placedKeys.some(key => {
         const [r, c] = key.split(',').map(Number);
-        return (
-          (r > 0  && tournament.boardState[r - 1][c].letter !== null) ||
-          (r < 14 && tournament.boardState[r + 1][c].letter !== null) ||
-          (c > 0  && tournament.boardState[r][c - 1].letter !== null) ||
-          (c < 14 && tournament.boardState[r][c + 1].letter !== null)
-        );
+        // Adjacence directe aux 4 cases
+        if (r > 0  && tournament.boardState[r - 1][c].letter !== null) return true;
+        if (r < 14 && tournament.boardState[r + 1][c].letter !== null) return true;
+        if (c > 0  && tournament.boardState[r][c - 1].letter !== null) return true;
+        if (c < 14 && tournament.boardState[r][c + 1].letter !== null) return true;
+        return false;
       });
       if (!isConnected) {
-        alert("Placement invalide : votre mot doit s'appuyer sur une lettre ou un mot déjà posé sur le plateau (règle du crossword).");
+        alert("Règle crossword : votre mot doit s'appuyer sur une lettre déjà posée sur le plateau.");
         return;
       }
     }
@@ -627,6 +643,8 @@ export default function App() {
   };
 
   const handleCellClick = (r: number, c: number) => {
+    // Bloquer toute interaction quand le round est terminé
+    if (activeRound?.status === 'ended') return;
     const key = `${r},${c}`;
     const hasTempLetter = tempPlacement[key];
 
@@ -652,6 +670,8 @@ export default function App() {
   };
 
   const handleSelectRackLetter = (letter: string, index: number) => {
+    // Bloquer toute interaction quand le round est terminé
+    if (activeRound?.status === 'ended') return;
     setSelectedRackLetter(prev => {
       if (prev && prev.index === index) {
         return null; // deselect
@@ -1777,6 +1797,17 @@ export default function App() {
                       : timerLeft <= 30 ? 'text-red-600'
                       : timerLeft <= 60 ? 'text-amber-600'
                       : 'text-emerald-700';
+
+                    // Quand le round est terminé : bannière d'attente du prochain tirage
+                    if (activeRound.status === 'ended') {
+                      return (
+                        <div className="mt-2 rounded-xl p-4 bg-amber-50 border border-amber-200/60 flex flex-col items-center gap-2 text-center">
+                          <span className="text-2xl">⏳</span>
+                          <p className="text-sm font-black text-amber-800">TOP publié — En attente du prochain tirage</p>
+                          <p className="text-[11px] text-amber-600">L'arbitre va bientôt lancer le coup suivant.</p>
+                        </div>
+                      );
+                    }
 
                     return (
                       <div className={`flex flex-col gap-2 mt-2 rounded-xl p-3 animate-fade-in text-center border ${
