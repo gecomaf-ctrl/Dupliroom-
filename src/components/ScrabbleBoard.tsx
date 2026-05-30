@@ -171,10 +171,10 @@ export function ScrabbleBoard({
       )}
 
       {/* Responsive Board viewport with Zoom wrapper */}
-      <div className="w-full bg-slate-50 dark:bg-emerald-950/20 border border-slate-200/80 rounded-2xl overflow-auto custom-scrollbar p-1 flex justify-center shadow-inner select-none max-h-[500px]">
+      <div className="w-full bg-slate-50 dark:bg-emerald-950/20 border border-slate-200/80 rounded-2xl overflow-auto custom-scrollbar p-1 flex justify-center shadow-inner select-none max-h-[520px]" style={{ touchAction: 'pan-x pan-y' }}>
         <div 
-          className="origin-top transition-transform duration-100 ease-out select-none"
-          style={{ transform: `scale(${zoom})`, width: '100%', minWidth: '460px', maxWidth: '620px' }}
+          className="origin-top-left select-none flex-shrink-0"
+          style={{ transform: `scale(${zoom})`, transformOrigin: 'top center', width: '100%', minWidth: '460px', maxWidth: '620px', marginBottom: zoom > 1 ? `${(zoom - 1) * 400}px` : undefined }}
         >
           {/* 15x15 Scrabble grid */}
           <div className="grid gap-[2px] p-2 bg-emerald-900/90 rounded-xl w-full aspect-square" style={{ display: 'grid', gridTemplateColumns: 'repeat(16, minmax(0, 1fr))' }}>
@@ -207,8 +207,8 @@ export function ScrabbleBoard({
 
                     if (cell.isTemp) {
                       cellStyle = isJoker
-                        ? "bg-amber-100 text-rose-650 border border-rose-350 font-black shadow-md scale-[1.03] animate-pulse"
-                        : "bg-amber-300 text-amber-950 font-black shadow-md border-2 border-amber-600 scale-[1.03] animate-pulse";
+                        ? "bg-amber-100 text-rose-650 border-2 border-rose-400 font-black shadow-md ring-1 ring-amber-300"
+                        : "bg-amber-300 text-amber-950 font-black shadow-md border-2 border-amber-600 ring-1 ring-amber-400";
                     } else if (cell.isSubmitted) {
                       cellStyle = isJoker
                         ? "bg-indigo-100 text-indigo-700 border-2 border-indigo-400 font-black shadow-md"

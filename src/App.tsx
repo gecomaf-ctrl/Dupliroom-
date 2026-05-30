@@ -50,8 +50,14 @@ async function hashString(input: string): Promise<string> {
 }
 
 export default function App() {
+  // Mode invité : lien d'invitation direct (bypass mot de passe)
+  const inviteCode = new URLSearchParams(window.location.search).get('join') || '';
+  const isGuestMode = !!inviteCode;
+
   // Navigation states
-  const [currentScreen, setCurrentScreen] = useState<'password' | 'splash' | 'accueil' | 'creer' | 'rejoindre' | 'salle_attente' | 'partie' | 'stats' | 'entrainement'>('password');
+  const [currentScreen, setCurrentScreen] = useState<'password' | 'splash' | 'accueil' | 'creer' | 'rejoindre' | 'salle_attente' | 'partie' | 'stats' | 'entrainement'>(
+    isGuestMode ? 'rejoindre' : 'password'
+  );
   const [copiedCode, setCopiedCode] = useState(false);
 
   // Authentification par mot de passe
@@ -96,7 +102,7 @@ export default function App() {
   });
 
   const [joinData, setJoinData] = useState({
-    code: '',
+    code: inviteCode,
     pseudo: ''
   });
 
@@ -106,8 +112,9 @@ export default function App() {
   // Suivi alerte 30 secondes pour éviter les doublons
   const [warned30s, setWarned30s] = useState(false);
 
-  // 0. Vérification de session existante au démarrage
+  // 0. Vérification de session existante au démarrage (ignorée en mode invité)
   useEffect(() => {
+    if (isGuestMode) return;
     if (sessionStorage.getItem('dr_auth') === ACCESS_HASH) {
       setCurrentScreen('splash');
     }
@@ -319,10 +326,16 @@ export default function App() {
         const data = await res.json();
         setRoomCode(data.tournamentCode);
         setPlayerId(data.playerId);
-        setTournament(data.tournament);
         setUsername(formData.arbitreName);
-        
-        setCurrentScreen('salle_attente');
+
+        // Fetch full tournament state immediately
+        const statusRes = await fetch(`/api/tournament/${data.tournamentCode}/status`);
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          setTournament(statusData);
+        }
+
+        setCurrentScreen('partie');
         triggerAlert("Tournoi créé ! En attente des joueurs.");
       } else {
         const err = await res.json();
@@ -354,12 +367,7 @@ export default function App() {
         const statusRes = await fetch(`/api/tournament/${data.tournamentCode}/status`);
         const statusData = await statusRes.json();
         setTournament(statusData);
-
-        if (statusData.state === 'playing') {
-          setCurrentScreen('partie');
-        } else {
-          setCurrentScreen('salle_attente');
-        }
+        setCurrentScreen('partie');
         triggerAlert(`Bienvenue ${joinData.pseudo}!`);
       } else {
         const err = await res.json();
@@ -634,7 +642,7 @@ export default function App() {
     setTempPlacement({});
     setSubmittedPlacement({});
     setSelectedRackLetter(null);
-    setCurrentScreen('accueil');
+    setCurrentScreen(isGuestMode ? 'rejoindre' : 'accueil');
   };
 
   // Compute calculated metrics of active placement
@@ -1010,7 +1018,7 @@ export default function App() {
       )}
 
       {/* C. Create Tournament Screen */}
-      {currentScreen === 'creer' && (
+      {currentScreen === 'creer' && !isGuestMode && (
         <div className="min-h-screen bg-[#F8F9FA] p-6 text-[#1A2A6C] max-w-xl mx-auto w-full flex flex-col justify-between animate-[fadeIn_0.5s_ease-out]" id="screen-creer">
           <div>
             {/* Header / Top Ribbon with Logo Tile */}
@@ -1306,15 +1314,17 @@ export default function App() {
 
                 {/* Submit Panel Buttons */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                  <button
-                    onClick={() => setCurrentScreen('accueil')}
-                    className="py-4 rounded-[24px] bg-gradient-to-r from-[#DFB951] to-[#C09432] text-white hover:brightness-105 active:scale-95 transition-all text-sm font-black tracking-wide shadow-[0_6px_20px_rgba(212,175,55,0.22)] border border-[#DFB951]/20 cursor-pointer text-center"
-                  >
-                    Retour l'accueil
-                  </button>
+                  {!isGuestMode && (
+                    <button
+                      onClick={() => setCurrentScreen('accueil')}
+                      className="py-4 rounded-[24px] bg-gradient-to-r from-[#DFB951] to-[#C09432] text-white hover:brightness-105 active:scale-95 transition-all text-sm font-black tracking-wide shadow-[0_6px_20px_rgba(212,175,55,0.22)] border border-[#DFB951]/20 cursor-pointer text-center"
+                    >
+                      Retour l'accueil
+                    </button>
+                  )}
                   <button
                     onClick={handleJoinTournament}
-                    className="py-4 rounded-[24px] bg-gradient-to-r from-[#0C7645] to-[#065C34] text-white hover:brightness-105 active:scale-95 transition-all text-sm font-black tracking-wide shadow-[0_6px_20px_rgba(8,108,62,0.22)] border border-[#149959]/20 cursor-pointer text-center"
+                    className={`py-4 rounded-[24px] bg-gradient-to-r from-[#0C7645] to-[#065C34] text-white hover:brightness-105 active:scale-95 transition-all text-sm font-black tracking-wide shadow-[0_6px_20px_rgba(8,108,62,0.22)] border border-[#149959]/20 cursor-pointer text-center ${isGuestMode ? 'col-span-full' : ''}`}
                   >
                     Rejoindre la salle
                   </button>
@@ -1324,36 +1334,38 @@ export default function App() {
             </div>
           </div>
 
-          {/* Luxury Native Mobile Bottom Tab Bar */}
-          <div className="border-t border-gray-100/60 bg-[#FCFDFD] h-20 -mx-6 -mb-6 mt-12 rounded-b-[40px] px-6 flex items-center justify-between shadow-[0_-5px_25px_rgba(0,0,0,0.015)]">
-            <button 
-              onClick={() => setCurrentScreen('accueil')}
-              className="flex flex-col items-center justify-center flex-1 cursor-pointer"
-            >
-              <Home size={22} className="text-gray-400 hover:text-[#D4AF37] transition-colors" />
-              <span className="text-[10px] font-black text-gray-400 mt-1">Home</span>
-            </button>
+          {/* Barre de navigation — simplifiée en mode invité */}
+          {!isGuestMode && (
+            <div className="border-t border-gray-100/60 bg-[#FCFDFD] h-20 -mx-6 -mb-6 mt-12 rounded-b-[40px] px-6 flex items-center justify-between shadow-[0_-5px_25px_rgba(0,0,0,0.015)]">
+              <button 
+                onClick={() => setCurrentScreen('accueil')}
+                className="flex flex-col items-center justify-center flex-1 cursor-pointer"
+              >
+                <Home size={22} className="text-gray-400 hover:text-[#D4AF37] transition-colors" />
+                <span className="text-[10px] font-black text-gray-400 mt-1">Home</span>
+              </button>
 
-            <div className="flex flex-col items-center justify-center flex-1 cursor-pointer">
-              <div className="w-10 h-7 rounded-full bg-[#FAF7ED] border border-[#D4AF37]/45 flex items-center justify-center text-xs font-black text-[#D4AF37] shadow-inner">
-                {joinData.code || '0:0'}
+              <div className="flex flex-col items-center justify-center flex-1 cursor-pointer">
+                <div className="w-10 h-7 rounded-full bg-[#FAF7ED] border border-[#D4AF37]/45 flex items-center justify-center text-xs font-black text-[#D4AF37] shadow-inner">
+                  {joinData.code || '0:0'}
+                </div>
+                <span className="text-[10px] font-black text-[#D4AF37] mt-1">Matches</span>
               </div>
-              <span className="text-[10px] font-black text-[#D4AF37] mt-1">Matches</span>
-            </div>
 
-            <button 
-              onClick={() => setCurrentScreen('entrainement')}
-              className="flex flex-col items-center justify-center flex-1 cursor-pointer"
-            >
-              <User size={22} className="text-gray-400 hover:text-[#D4AF37] transition-colors" />
-              <span className="text-[10px] font-black text-gray-400 mt-1">Solo</span>
-            </button>
+              <button 
+                onClick={() => setCurrentScreen('entrainement')}
+                className="flex flex-col items-center justify-center flex-1 cursor-pointer"
+              >
+                <User size={22} className="text-gray-400 hover:text-[#D4AF37] transition-colors" />
+                <span className="text-[10px] font-black text-gray-400 mt-1">Solo</span>
+              </button>
 
-            <div className="flex flex-col items-center justify-center flex-1 cursor-pointer opacity-50">
-              <Settings size={22} className="text-gray-400" />
-              <span className="text-[10px] font-black text-gray-400 mt-1">Settings</span>
+              <div className="flex flex-col items-center justify-center flex-1 cursor-pointer opacity-50">
+                <Settings size={22} className="text-gray-400" />
+                <span className="text-[10px] font-black text-gray-400 mt-1">Settings</span>
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
       )}
@@ -1600,6 +1612,34 @@ export default function App() {
             </div>
           </div>
 
+          {/* Bannière lobby : coup 1 pas encore lancé */}
+          {tournament.currentRoundNumber === 0 && (
+            <div className="relative">
+              <div className="absolute inset-0 border-2 border-[#D4AF37]/15 rounded-[24px] translate-x-1 translate-y-1 pointer-events-none" />
+              <div className="relative bg-amber-50 border border-amber-200/60 rounded-[24px] p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="w-10 h-10 bg-gradient-to-br from-[#D4AF37] to-[#c09432] rounded-xl flex items-center justify-center shrink-0 shadow-md">
+                    <Users className="w-5 h-5 text-white" />
+                  </span>
+                  <div>
+                    <h2 className="text-sm font-black text-[#1A2A6C]">Salle ouverte — En attente du premier tirage</h2>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      {Object.values(tournament.players).filter((p: any) => !p.isArbitre).length} joueur(s) connecté(s)
+                      {isMeArbitre ? ' — Lancez le coup 1 depuis votre console ci-dessous.' : ' — L\'arbitre va bientôt lancer le premier coup.'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(Object.values(tournament.players) as Player[]).filter(p => !p.isArbitre).map(p => (
+                    <span key={p.id} className="text-[10px] font-black bg-white border border-amber-200 text-amber-800 px-2 py-1 rounded-full">
+                      {p.username}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
             {/* L1. Left pane: Scrabble physics, board and rack */}
@@ -1765,7 +1805,19 @@ export default function App() {
             {/* L2. Right pane: Live rankings */}
             <div className="lg:col-span-4 flex flex-col gap-6">
 
-              {/* Referee Console inline projection if player is the Judge */}
+              {/* Console Arbitre */}
+              {isMeArbitre && (
+                <ConsoleArbitre
+                  tournament={tournament}
+                  playerId={playerId}
+                  onDrawLetters={handleAdminDrawLetters}
+                  onStartTimer={handleAdminStartTimer}
+                  onPauseTimer={handleAdminPauseTimer}
+                  onEndRoundEarly={handleAdminEndRoundEarly}
+                  onValidateTop={handleAdminValidateTop}
+                  onPlayerAction={handlePlayerAction}
+                />
+              )}
 
               {/* Miniature Live Ranking (Classement live) */}
               <div className="relative">
@@ -1926,7 +1978,7 @@ export default function App() {
       )}
 
       {/* H. Solo Training Mode Screen */}
-      {currentScreen === 'entrainement' && (
+      {currentScreen === 'entrainement' && !isGuestMode && (
         <TrainingMode onClose={handleRestartNew} />
       )}
 
